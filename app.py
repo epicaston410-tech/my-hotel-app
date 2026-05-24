@@ -307,4 +307,141 @@ with tab1:
                     with ec2:
                         # 🔎 แก้ไขบั๊กคอลัมน์ชื่อตรงนี้ให้ถูกต้องตรงกับที่ SELECT (เบอร์โทรศัพท์เจ้าของ / เบอร์โทรศัพท์ผู้จัดการ)
                         edit_tel = st.text_input("เบอร์โทรศัพท์เจ้าของ", value=str(hotel_row['เบอร์โทรศัพท์เจ้าของ']) if hotel_row['เบอร์โทรศัพท์เจ้าของ'] and str(hotel_row['เบอร์โทรศัพท์เจ้าของ']) != 'None' else "")
-                        edit_manager_tel = st.
+                        edit_manager_tel = st.text_input("เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)", value=str(hotel_row['เบอร์โทรศัพท์ผู้จัดการ']) if hotel_row['เบอร์โทรศัพท์ผู้จัดการ'] and str(hotel_row['เบอร์โทรศัพท์ผู้จัดการ']) != 'None' else "")
+                        edit_l_no = st.text_input("เลขที่ใบอนุญาต ร.บ. 2 *", value=str(hotel_row['เลขที่ใบอนุญาต (ร.บ.2)']) if hotel_row['เลขที่ใบอนุญาต (ร.บ.2)'] and str(hotel_row['เลขที่ใบอนุญาต (ร.บ.2)']) != 'None' else "")
+                        
+                        try: current_issue = datetime.strptime(str(hotel_row['วันออกใบอนุญาต']), "%Y-%m-%d").date()
+                        except: current_issue = date.today()
+                        try: current_expiry = datetime.strptime(str(hotel_row['วันหมดอายุ']), "%Y-%m-%d").date()
+                        except: current_expiry = date.today()
+                            
+                        edit_l_issue = st.date_input("วันที่ออกใบอนุญาต", current_issue)
+                        edit_l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", current_expiry)
+                        
+                        try: default_fee_idx = FEE_STATUS_OPTIONS.index(hotel_row['สถานะค่าธรรมเนียมรายปี'])
+                        except: default_fee_idx = 0
+                        edit_l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", FEE_STATUS_OPTIONS, index=default_fee_idx)
+                    
+                    st.markdown("**📍 แก้ไขข้อมูลที่อยู่ตำแหน่งโรงแรม**")
+                    current_full_address = str(hotel_row['ที่อยู่']) if hotel_row['ที่อยู่'] else ""
+                    
+                    detected_sub_idx = 0
+                    for sub_idx, sub_name in enumerate(SUBDISTRICTS):
+                        if sub_name in current_full_address:
+                            detected_sub_idx = sub_idx
+                            break
+                    
+                    edit_subdistrict = st.selectbox("เลือกตำบล/เขตเทศบาล *", SUBDISTRICTS, index=detected_sub_idx, key="edit_sub_select")
+                    clean_address_detail = current_full_address.replace(edit_subdistrict, "").strip()
+                    edit_address_detail = st.text_input("ที่อยู่เพิ่มเติม (เลขที่, หมู่, ถนน, ซอย) *", value=clean_address_detail)
+                    
+                    # เลื่อนย้ายปุ่มมาไว้ในบล็อก st.form เสมอเพื่อแก้ปัญหา Missing Submit Button
+                    update_btn = st.form_submit_button("🆙 อัปเดตข้อมูลที่แก้ไข")
+                    
+                    if update_btn:
+                        if not edit_name or not edit_owner or not edit_l_no or not edit_address_detail:
+                            st.error("❌ กรุณากรอกข้อมูลและรายละเอียดที่อยู่ให้ครบถ้วน")
+                        else:
+                            final_address = f"{edit_address_detail} {edit_subdistrict}"
+                            conn = get_connection()
+                            try:
+                                cursor = conn.cursor()
+                                cursor.execute("""
+                                    UPDATE hotels 
+                                    SET hotel_name=?, hotel_type=?, owner_name=?, manager_name=?, manager_tel=?, total_rooms=?, tel=?, address=?
+                                    WHERE id=?
+                                """, (edit_name, edit_type, edit_owner, edit_manager, edit_manager_tel, edit_rooms, edit_tel, final_address, selected_id))
+                                
+                                cursor.execute("""
+                                    UPDATE licenses 
+                                    SET license_no=?, issue_date=?, expiry_date=?, fee_status=?
+                                    WHERE hotel_id=?
+                                """, (edit_l_no, str(edit_l_issue), str(edit_l_expiry), edit_l_fee, selected_id))
+                                
+                                conn.commit()
+                                st.success(f"🎉 อัปเดตข้อมูลระบบของ '{edit_name}' เรียบร้อยแล้ว!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ เกิดข้อผิดพลาด: {e}")
+                            finally:
+                                conn.close()
+                                
+            with delete_col:
+                st.warning("⚠️ โซนอันตราย: ลบข้อมูล")
+                st.write(f"หากโรงแรม **{hotel_row['ชื่อโรงแรม']}** ปิดตัวลงอย่างถาวร พี่สามารถกดปุ่มด้านล่างเพื่อลบออกจากฐานข้อมูลได้ทันที")
+                
+                confirm_delete = st.checkbox("ยืนยันว่าต้องการลบโรงแรมนี้จริง ๆ")
+                if st.button("🗑️ ลบข้อมูลโรงแรมนี้ออกจากระบบ", type="primary", disabled=not confirm_delete):
+                    if delete_hotel(selected_id):
+                        st.success("🗑️ ลบข้อมูลโรงแรมออกจากฐานข้อมูลเรียบร้อยแล้ว!")
+                        st.rerun()
+        
+        st.markdown("---")
+        excel_file = to_excel(df_filtered[display_cols])
+        st.download_button(
+            label="📥 ปริ้นสรุปข้อมูล: ดาวน์โหลดรายงาน (Excel)",
+            data=excel_file,
+            file_name=f"รายงานสรุปทะเบียนโรงแรม_{today}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("💡 ปัจจุบันยังไม่มีข้อมูลโรงแรมในระบบฐานข้อมูล ลองไปเพิ่มข้อมูลที่แท็บด้านบนได้เลยครับ")
+
+with tab2:
+    st.markdown("### 📝 ฟอร์มลงทะเบียนโรงแรมและใบอนุญาตตัวใหม่")
+    
+    with st.form("hotel_add_form", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            h_name = st.text_input("ชื่อโรงแรม *")
+            h_type = st.selectbox("ประเภทโรงแรม *", HOTEL_TYPES)
+            h_owner = st.text_input("ชื่อผู้ประกอบการ / เจ้าของ *")
+            h_manager = st.text_input("ชื่อผู้จัดการโรงแรม (หน้างาน)")
+            h_rooms = st.number_input("จำนวนห้องพักทั้งหมด *", min_value=1, step=1)
+        
+        with c2:
+            h_tel = st.text_input("เบอร์โทรศัพท์เจ้าของ")
+            h_manager_tel = st.text_input("เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)")
+            l_no = st.text_input("เลขที่ใบอนุญาต ร.บ. 2 *")
+            l_issue = st.date_input("วันที่ออกใบอนุญาต", date.today())
+            l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", date.today())
+            l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", FEE_STATUS_OPTIONS)
+            
+        st.markdown("---")
+        st.markdown("**📍 ข้อมูลที่อยู่ตำแหน่งโรงแรม**")
+        addr_col1, addr_col2 = st.columns([1, 2])
+        with addr_col1:
+            h_subdistrict = st.selectbox("เลือกตำบล/เขตเทศบาล *", SUBDISTRICTS)
+        with addr_col2:
+            h_address_detail = st.text_input("ที่อยู่เพิ่มเติม (ระบุเลขที่บ้าน, หมู่ที่, ถนน, ซอย) *", placeholder="เช่น 123/4 หมู่ 2 ถนนสละชีพ")
+            
+        submit_btn = st.form_submit_button("💾 บันทึกข้อมูลลงเครื่อง")
+        
+        if submit_btn:
+            if not h_name or not h_owner or not l_no or not h_address_detail:
+                st.error("❌ กรุณากรอกข้อมูลในช่องที่มีเครื่องหมาย * รวมถึงรายละเอียดที่อยู่ให้ครบถ้วน")
+            else:
+                full_address = f"{h_address_detail} {h_subdistrict}"
+                
+                conn = get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO hotels (hotel_name, hotel_type, owner_name, manager_name, manager_tel, total_rooms, tel, address)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (h_name, h_type, h_owner, h_manager, h_manager_tel, h_rooms, h_tel, full_address))
+                    
+                    last_id = cursor.lastrowid
+                    
+                    cursor.execute("""
+                        INSERT INTO licenses (hotel_id, license_no, issue_date, expiry_date, fee_status)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (last_id, l_no, str(l_issue), str(l_expiry), l_fee))
+                    
+                    conn.commit()
+                    st.success(f"🎉 บันทึกข้อมูลโรงแรม '{h_name}' ลงทะเบียนเรียบร้อยแล้ว!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล: {e}")
+                finally:
+                    conn.close()
