@@ -1,387 +1,160 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from datetime import date, datetime
-import io
+import os
 
-# 1. ตั้งค่าหน้าเว็บให้ดูสะอาด สไตล์งานราชการ
-st.set_page_config(page_title="ระบบทะเบียนโรงแรม - อำเภอ", layout="wide")
+# ตั้งค่าหน้าจอให้เป็นแนวกว้าง และเปลี่ยนโทนเป็น Dark Mode อัตโนมัติ
+st.set_page_config(page_title="ระบบฐานข้อมูลโรงแรม", layout="wide")
 
-st.title("🏨 ระบบบริหารจัดการทะเบียนและแจ้งเตือนวันหมดอายุโรงแรม")
-st.subheader("งานทะเบียนและฝ่ายความมั่นคง ที่ว่าการอำเภอ")
-st.markdown("---")
-
-# 2. ฟังก์ชันเชื่อมต่อฐานข้อมูล SQLite
-DB_FILE = "database.db"
-
-def get_connection():
-    conn = sqlite3.connect(DB_FILE)
+# ฟังก์ชันเชื่อมต่อฐานข้อมูล SQLite
+def get_db_connection():
+    # ระบบจะสร้างไฟล์ database.db ขึ้นมาโดยอัตโนมัติถ้าไม่มีไฟล์อยู่
+    conn = sqlite3.connect('database.db')
     return conn
 
-# ฟังก์ชันสร้างตารางเริ่มต้น
+# ฟังก์ชันเริ่มต้นระบบ: สร้างตารางและอัปเดตโครงสร้างตาราง
 def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    # 1. สร้างตารางพื้นฐานในกรณีที่เป็นการเปิดใช้งานครั้งแรก
+    c.execute('''
         CREATE TABLE IF NOT EXISTS hotels (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             hotel_name TEXT NOT NULL,
-            hotel_type TEXT NOT NULL,
-            owner_name TEXT NOT NULL,
-            total_rooms INTEGER NOT NULL,
-            tel TEXT,
-            address TEXT
+            owner_name TEXT,
+            owner_phone TEXT,
+            manager_name TEXT,
+            manager_phone TEXT,
+            province TEXT,
+            amphoe TEXT,
+            tambon TEXT,
+            address_detail TEXT
         )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS licenses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            hotel_id INTEGER,
-            license_no TEXT NOT NULL,
-            issue_date TEXT NOT NULL,
-            expiry_date TEXT NOT NULL,
-            fee_status TEXT DEFAULT 'จ่ายแล้ว',
-            FOREIGN KEY (hotel_id) REFERENCES hotels(id) ON DELETE CASCADE
-        )
-    """)
+    ''')
+    
+    # 2. สูตรลับป้องกันระบบพัง: ตรวจสอบและเพิ่มคอลัมน์ผู้จัดการอัตโนมัติ (กรณีพี่ใช้ฐานข้อมูลเดิมบนคลาวด์)
+    c.execute("PRAGMA table_info(hotels)")
+    columns = [column[1] for column in c.fetchall()]
+    
+    if 'manager_name' not in columns:
+        c.execute("ALTER TABLE hotels ADD COLUMN manager_name TEXT")
+    if 'manager_phone' not in columns:
+        c.execute("ALTER TABLE hotels ADD COLUMN manager_phone TEXT")
+        
     conn.commit()
     conn.close()
 
+# รันระบบฐานข้อมูลตอนเปิดแอป
 init_db()
 
-# รายการตัวเลือกตำบลในอำเภอเมืองประจวบคีรีขันธ์
-SUBDISTRICTS = [
-    "ตำบลเกาะหลัก",
-    "ตำบลอ่าวน้อย",
-    "ตำบลคลองวาฬ",
-    "ตำบลห้วยทราย",
-    "ตำบลบ่อนอก",
-    "เขตเทศบาลเมืองประจวบคีรีขันธ์"
-]
+# --- ส่วนของหน้าตาโปรแกรม (UI) ---
+st.title("🏨 ระบบจัดการและบันทึกข้อมูลข้อมูลโรงแรม")
+st.markdown("---")
 
-def load_data():
-    conn = get_connection()
-    query = """
-        SELECT 
-            h.id AS 'รหัสระบบ',
-            h.hotel_name AS 'ชื่อโรงแรม',
-            h.hotel_type AS 'ประเภทโรงแรม',
-            h.owner_name AS 'ชื่อผู้ประกอบการ',
-            h.total_rooms AS 'จำนวนห้องพัก',
-            h.tel AS 'เบอร์โทรศัพท์',
-            l.license_no AS 'เลขที่ใบอนุญาต (ร.บ.2)',
-            l.issue_date AS 'วันออกใบอนุญาต',
-            l.expiry_date AS 'วันหมดอายุ',
-            l.fee_status AS 'สถานะค่าธรรมเนียมรายปี',
-            h.address AS 'ที่อยู่'
-        FROM hotels h
-        LEFT JOIN licenses l ON h.id = l.hotel_id
-        ORDER BY h.hotel_name ASC
-    """
-    try:
-        df = pd.read_sql(query, con=conn)
-        return df
-    except Exception as e:
-        st.error(f"⚠️ ไม่สามารถเชื่อมต่อฐานข้อมูลได้: {e}")
-        return pd.DataFrame()
-    finally:
-        conn.close()
+# แบ่งหน้าจอทำงานออกเป็น 2 แท็บ: แท็บกรอกข้อมูล และ แท็บแสดงผล/ค้นหา
+tab1, tab2 = st.tabs(["📝 บันทึกข้อมูลโรงแรมใหม่", "🔍 ค้นหาและดูข้อมูลทั้งหมด"])
 
-def delete_hotel(hotel_id):
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM hotels WHERE id = ?", (hotel_id,))
-        cursor.execute("DELETE FROM licenses WHERE hotel_id = ?", (hotel_id,))
-        conn.commit()
-        return True
-    except Exception as e:
-        st.error(f"❌ เกิดข้อผิดพลาดในการลบข้อมูล: {e}")
-        return False
-    finally:
-        conn.close()
-
-def to_excel(df_data):
-    df_excel = df_data.copy()
-    for col in df_excel.columns:
-        if df_excel[col].dtype == 'object':
-            df_excel[col] = df_excel[col].astype(str)
-            
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_excel.to_excel(writer, index=False, sheet_name='รายงานทะเบียนโรงแรม')
-    processed_data = output.getvalue()
-    return processed_data
-
-# 3. เมนูแยกแท็บใช้งาน
-tab1, tab2 = st.tabs(["📋 ดูข้อมูลและออกรายงาน", "➕ เพิ่มทะเบียนโรงแรมใหม่"])
-
+# ================= แท็บที่ 1: หน้ากรอกข้อมูล =================
 with tab1:
-    df_source = load_data()
-    if not df_source.empty:
-        today = date.today()
-        remaining_days = []
-        status_labels = []
-
-        for idx, row in df_source.iterrows():
-            expiry = row['วันหมดอายุ']
-            if pd.notnull(expiry) and expiry != "":
-                try:
-                    if isinstance(expiry, str):
-                        expiry_dt = datetime.strptime(expiry.split()[0], "%Y-%m-%d").date()
-                    else:
-                        expiry_dt = expiry
-                        
-                    delta = expiry_dt - today
-                    days = delta.days
-                    remaining_days.append(days)
-                    
-                    if days <= 0:
-                        status_labels.append("🔴 หมดอายุแล้ว")
-                    elif days <= 90:
-                        status_labels.append("🟡 ใกล้หมดอายุ (น้อยกว่า 90 วัน)")
-                    else:
-                        status_labels.append("🟢 ปกติ")
-                except Exception:
-                    remaining_days.append(None)
-                    status_labels.append("⚪ รูปแบบวันที่ไม่ถูกต้อง")
-            else:
-                remaining_days.append(None)
-                status_labels.append("⚪ ไม่มีข้อมูลใบอนุญาต")
-
-        df_source['วันคงเหลือ (วัน)'] = remaining_days
-        df_source['สถานะใบอนุญาต'] = status_labels
-
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("โรงแรมทั้งหมดในอำเภอ", len(df_source))
-        col2.metric("🟢 Status ปกติ", len(df_source[df_source['สถานะใบอนุญาต'] == "🟢 ปกติ"]))
-        col3.metric("🟡 ใกล้หมดอายุ", len(df_source[df_source['สถานะใบอนุญาต'] == "🟡 ใกล้หมดอายุ (น้อยกว่า 90 วัน)"]))
-        col4.metric("🔴 หมดอายุแล้ว", len(df_source[df_source['สถานะใบอนุญาต'] == "🔴 หมดอายุแล้ว"]))
+    st.subheader("กรอกรายละเอียดโรงแรม")
+    
+    # ใช้ระบบคอลัมน์เพื่อจัดกลุ่มกล่องข้อความให้ดูสวยงามไม่รกตา
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        hotel_name = st.text_input("🏢 ชื่อสถานประกอบการ / ชื่อโรงแรม", placeholder="กรอกชื่อโรงแรม...")
+        owner_name = st.text_input("👤 ชื่อเจ้าของโรงแรม (ผู้รับใบอนุญาต)", placeholder="ชื่อ-นามสกุล เจ้าของ...")
+        owner_phone = st.text_input("📞 เบอร์โทรศัพท์เจ้าของโรงแรม", placeholder="08x-xxxxxxx")
         
-        st.markdown("---")
+    with col2:
+        # --- จุดที่เพิ่มใหม่ตามโจทย์ของพี่ ---
+        manager_name = st.text_input("👔 ชื่อผู้จัดการโรงแรม (หน้างาน)", placeholder="ชื่อ-นามสกุล ผู้จัดการ...")
+        manager_phone = st.text_input("📱 เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)", placeholder="08x-xxxxxxx")
+        # ----------------------------------
+        address_detail = st.text_area("📍 ที่อยู่รายละเอียดเพิ่มเติม (เลขที่, ถนน, ซอย)", placeholder="เช่น 123/4 ม.5 ต.โคกขาม...")
 
-        st.markdown("### 🔍 ค้นหาข้อมูลโรงแรม")
-        # อัปเดตคำแนะนำในช่องค้นหาให้ชัดเจนขึ้นว่าสามารถพิมพ์ตำบลได้
-        search_query = st.text_input("พิมพ์ชื่อโรงแรม, ชื่อเจ้าของ หรือชื่อตำบล/เทศบาล เพื่อค้นหา...")
-        
-        df_filtered = df_source.copy()
-        if search_query:
-            # เพิ่มเงื่อนไขให้ค้นหาจากคอลัมน์ 'ที่อยู่' (ซึ่งรวมตำบลไว้แล้ว) ด้วยคำสั่ง .str.contains
-            df_filtered = df_filtered[
-                df_filtered['ชื่อโรงแรม'].str.contains(search_query, na=False) | 
-                df_filtered['ชื่อผู้ประกอบการ'].str.contains(search_query, na=False) |
-                df_filtered['ที่อยู่'].str.contains(search_query, na=False)
-            ]
+    st.markdown("##### 🌐 พื้นที่ที่ตั้ง")
+    col3, col4, col5 = st.columns(3)
+    with col3:
+        province = st.text_input("จังหวัด", value="ประจวบคีรีขันธ์")
+    with col4:
+        amphoe = st.text_input("อำเภอ / เขต")
+    with col5:
+        tambon = st.text_input("ตำบล / แขวง")
 
-        st.markdown("### 📋 ตารางข้อมูลสถานะล่าสุด")
-        items_per_page = 20
-        total_items = len(df_filtered)
-        
-        if total_items > 0:
-            import math
-            total_pages = math.ceil(total_items / items_per_page)
-            
-            if 'current_page' not in st.session_state:
-                st.session_state.current_page = 1
-                
-            if st.session_state.current_page > total_pages:
-                st.session_state.current_page = total_pages
-            if st.session_state.current_page < 1:
-                st.session_state.current_page = 1
-
-            start_idx = (st.session_state.current_page - 1) * items_per_page
-            end_idx = min(start_idx + items_per_page, total_items)
-            
-            df_page = df_filtered.iloc[start_idx:end_idx]
-            st.dataframe(df_page, use_container_width=True)
-            
-            p_col1, p_col2, p_col3, p_col4 = st.columns([2, 3, 2, 5])
-            with p_col1:
-                if st.button("⬅️ หน้าก่อนหน้า", disabled=(st.session_state.current_page == 1)):
-                    st.session_state.current_page -= 1
-                    st.rerun()
-            with p_col2:
-                page_options = list(range(1, total_pages + 1))
-                selected_page = st.selectbox(
-                    f"แสดงผลโรงแรมลำดับที่ {start_idx + 1} - {end_idx} (จากทั้งหมด {total_items} โรงแรม)",
-                    options=page_options,
-                    index=page_options.index(st.session_state.current_page),
-                    key="page_select_box"
-                )
-                if selected_page != st.session_state.current_page:
-                    st.session_state.current_page = selected_page
-                    st.rerun()
-            with p_col3:
-                if st.button("หน้าถัดไป ➡️", disabled=(st.session_state.current_page == total_pages)):
-                    st.session_state.current_page += 1
-                    st.rerun()
+    # ปุ่มกดบันทึกข้อมูล
+    if st.button("💾 บันทึกข้อมูลเข้าสู่ระบบ", type="primary"):
+        if hotel_name:  # ป้องกันการกดบันทึกโดยไม่มีชื่อโรงแรม
+            conn = get_db_connection()
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO hotels (
+                    hotel_name, owner_name, owner_phone, manager_name, manager_phone, 
+                    province, amphoe, tambon, address_detail
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (hotel_name, owner_name, owner_phone, manager_name, manager_phone, 
+                  province, amphoe, tambon, address_detail))
+            conn.commit()
+            conn.close()
+            st.success(f"🎉 บันทึกข้อมูลโรงแรม '{hotel_name}' เรียบร้อยแล้ว!")
         else:
-            st.warning("❌ ไม่พบข้อมูลโรงแรมที่ตรงกับเงื่อนไขการค้นหา")
-            
+            st.error("⚠️ กรุณากรอกชื่อโรงแรมก่อนกดบันทึกครับ")
+
+# ================= แท็บที่ 2: หน้าโชว์ผลลัพธ์และค้นหา =================
+with tab2:
+    st.subheader("🔎 ค้นหาและตรวจสอบข้อมูลโรงงาน/โรงแรม")
+    
+    # ช่องค้นหาอัจฉริยะ (ค้นหาได้จากชื่อโรงแรม, อำเภอ หรือตำบล)
+    search_query = st.text_input("พิมพ์ชื่อโรงแรม, อำเภอ หรือ ตำบล เพื่อค้นหาด่วน...", placeholder="เช่น หัวหิน, กุยบุรี...")
+    
+    conn = get_db_connection()
+    # ดึงข้อมูลทั้งหมดออกมาก่อน
+    df = pd.read_sql_query("SELECT * FROM hotels", conn)
+    conn.close()
+    
+    if not df.empty:
+        # ระบบคัดกรองข้อมูลตามคำค้นหา
+        if search_query:
+            df = df[
+                df['hotel_name'].str.contains(search_query, case=False, na=False) |
+                df['amphoe'].str.contains(search_query, case=False, na=False) |
+                df['tambon'].str.contains(search_query, case=False, na=False)
+            ]
+        
+        # --- ล็อกเป้าหน้าโชว์: แสดงเฉพาะ ชื่อโรงแรม, ผู้จัดการ, เบอร์ผู้จัดการ และที่อยู่ตามโจทย์พี่ ---
+        # รวมที่อยู่เป็นข้อความยาวเส้นเดียวให้อ่านง่าย
+        df['ที่อยู่ตั้ง'] = df['address_detail'] + " ต." + df['tambon'] + " อ." + df['amphoe'] + " จ." + df['province']
+        
+        # คัดเอาคอลัมน์ที่จะไปแสดงผลหน้าบ้าน (ซ่อนชื่อเจ้าของและเบอร์เจ้าของไว้เบื้องหลัง)
+        df_display = df[['hotel_name', 'manager_name', 'manager_phone', 'ที่อยู่ตั้ง']].copy()
+        
+        # เปลี่ยนชื่อหัวตารางให้เป็นภาษาไทยหรูหราอ่านง่าย
+        df_display.columns = ['🏢 ชื่อโรงแรม', '👔 ผู้จัดการโรงแรม', '📱 เบอร์โทรศัพท์ผู้จัดการ', '📍 ที่อยู่และพิกัดที่ตั้ง']
+        
+        # แสดงตารางข้อมูลบนหน้าเว็บ
+        st.dataframe(df_display, use_container_width=True)
+        
+        # ฟีเจอร์ดาวน์โหลดไฟล์ Excel (สืบทอดความต้องการเดิม)
         st.markdown("---")
+        st.subheader("📥 ส่งออกข้อมูล")
         
-        st.markdown("### ⚙️ จัดการข้อมูลการจัดการระดับโรงแรม (แก้ไข/ลบข้อมูล)")
-        hotel_list = {f"[{row['รหัสระบบ']}] {row['ชื่อโรงแรม']} - เจ้าของ: {row['ชื่อผู้ประกอบการ']}": row['รหัสระบบ'] for idx, row in df_filtered.iterrows()}
-        selected_hotel_str = st.selectbox("เลือกโรงแรมที่ต้องการจัดการข้อมูล:", ["-- กรุณาเลือกโรงแรม --"] + list(hotel_list.keys()))
-        
-        if selected_hotel_str != "-- กรุณาเลือกโรงแรม --":
-            selected_id = hotel_list[selected_hotel_str]
-            hotel_row = df_filtered[df_filtered['รหัสระบบ'] == selected_id].iloc[0]
+        # ทำปุ่มโหลดไฟล์ Excel
+        @st.cache_data
+        def convert_df_to_excel(excel_df):
+            import io
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                excel_df.to_excel(writer, index=False, sheet_name='รายชื่อโรงแรม')
+            return output.getvalue()
             
-            edit_col, delete_col = st.columns([2, 1])
-            with edit_col:
-                st.info(f"📝 ฟอร์มแก้ไขข้อมูล: {hotel_row['ชื่อโรงแรม']}")
-                with st.form(f"edit_form_{selected_id}"):
-                    ec1, ec2 = st.columns(2)
-                    with ec1:
-                        edit_name = st.text_input("ชื่อโรงแรม *", value=str(hotel_row['ชื่อโรงแรม']))
-                        types = ["ประเภท 1 (เฉพาะห้องพัก)", "ประเภท 2 (ห้องพัก + ห้องอาหาร)", "ประเภท 3 (ห้องพัก + อาหาร + สถานบริการ)", "ประเภท 4"]
-                        try: default_type_idx = types.index(hotel_row['ประเภทโรงแรม'])
-                        except: default_type_idx = 0
-                        edit_type = st.selectbox("ประเภทโรงแรม *", types, index=default_type_idx)
-                        edit_owner = st.text_input("ชื่อผู้ประกอบการ / เจ้าของ *", value=str(hotel_row['ชื่อผู้ประกอบการ']))
-                        edit_rooms = st.number_input("จำนวนห้องพักทั้งหมด *", min_value=1, step=1, value=int(hotel_row['จำนวนห้องพัก']))
-                    
-                    with ec2:
-                        edit_tel = st.text_input("เบอร์โทรศัพท์ติดต่อ", value=str(hotel_row['เบอร์โทรศัพท์']) if hotel_row['เบอร์โทรศัพท์'] else "")
-                        edit_l_no = st.text_input("เลขที่ใบอนุญาต ร.บ. 2 *", value=str(hotel_row['เลขที่ใบอนุญาต (ร.บ.2)']) if hotel_row['เลขที่ใบอนุญาต (ร.บ.2)'] else "")
-                        
-                        try: current_issue = datetime.strptime(str(hotel_row['วันออกใบอนุญาต']), "%Y-%m-%d").date()
-                        except: current_issue = date.today()
-                        try: current_expiry = datetime.strptime(str(hotel_row['วันหมดอายุ']), "%Y-%m-%d").date()
-                        except: current_expiry = date.today()
-                            
-                        edit_l_issue = st.date_input("วันที่ออกใบอนุญาต", current_issue)
-                        edit_l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", current_expiry)
-                        
-                        fees = ["จ่ายแล้ว", "ค้างชำระ"]
-                        try: default_fee_idx = fees.index(hotel_row['สถานะค่าธรรมเนียมรายปี'])
-                        except: default_fee_idx = 0
-                        edit_l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", fees, index=default_fee_idx)
-                    
-                    st.markdown("**📍 แก้ไขข้อมูลที่อยู่ตำแหน่งโรงแรม**")
-                    current_full_address = str(hotel_row['ที่อยู่']) if hotel_row['ที่อยู่'] else ""
-                    
-                    detected_sub_idx = 0
-                    for sub_idx, sub_name in enumerate(SUBDISTRICTS):
-                        if sub_name in current_full_address:
-                            detected_sub_idx = sub_idx
-                            break
-                    
-                    edit_subdistrict = st.selectbox("เลือกตำบล/เขตเทศบาล *", SUBDISTRICTS, index=detected_sub_idx, key="edit_sub_select")
-                    
-                    clean_address_detail = current_full_address.replace(edit_subdistrict, "").strip()
-                    edit_address_detail = st.text_input("ที่อยู่เพิ่มเติม (เลขที่, หมู่, ถนน, ซอย) *", value=clean_address_detail)
-                    
-                    update_btn = st.form_submit_button("🆙 อัปเดตข้อมูลที่แก้ไข")
-                    
-                    if update_btn:
-                        if not edit_name or not edit_owner or not edit_l_no or not edit_address_detail:
-                            st.error("❌ กรุณากรอกข้อมูลและรายละเอียดที่อยู่ให้ครบถ้วน")
-                        else:
-                            final_address = f"{edit_address_detail} {edit_subdistrict}"
-                            conn = get_connection()
-                            try:
-                                cursor = conn.cursor()
-                                cursor.execute("""
-                                    UPDATE hotels 
-                                    SET hotel_name=?, hotel_type=?, owner_name=?, total_rooms=?, tel=?, address=?
-                                    WHERE id=?
-                                """, (edit_name, edit_type, edit_owner, edit_rooms, edit_tel, final_address, selected_id))
-                                
-                                cursor.execute("""
-                                    UPDATE licenses 
-                                    SET license_no=?, issue_date=?, expiry_date=?, fee_status=?
-                                    WHERE hotel_id=?
-                                """, (edit_l_no, str(edit_l_issue), str(edit_l_expiry), edit_l_fee, selected_id))
-                                
-                                conn.commit()
-                                st.success(f"🎉 อัปเดตข้อมูลระบบของ '{edit_name}' เรียบร้อยแล้ว!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ เกิดข้อผิดพลาด: {e}")
-                            finally:
-                                conn.close()
-                                
-            with delete_col:
-                st.warning("⚠️ โซนอันตราย: ลบข้อมูล")
-                st.write(f"หากโรงแรม **{hotel_row['ชื่อโรงแรม']}** ปิดตัวลงอย่างถาวร พี่สามารถกดปุ่มด้านล่างเพื่อลบออกจากฐานข้อมูลได้ทันที")
-                
-                confirm_delete = st.checkbox("ยืนยันว่าต้องการลบโรงแรมนี้จริง ๆ")
-                if st.button("🗑️ ลบข้อมูลโรงแรมนี้ออกจากระบบ", type="primary", disabled=not confirm_delete):
-                    if delete_hotel(selected_id):
-                        st.success("🗑️ ลบข้อมูลโรงแรมออกจากฐานข้อมูลเรียบร้อยแล้ว!")
-                        st.rerun()
+        excel_data = convert_df_to_excel(df_display)
         
-        st.markdown("---")
-        excel_file = to_excel(df_filtered)
         st.download_button(
-            label="📥 ปริ้นสรุปข้อมูล: ดาวน์โหลดรายงาน (Excel)",
-            data=excel_file,
-            file_name=f"รายงานสรุปทะเบียนโรงแรม_{today}.xlsx",
+            label="📥 ดาวน์โหลดข้อมูลทั้งหมดเป็นไฟล์ Excel (.xlsx)",
+            data=excel_data,
+            file_name="รายชื่อโรงแรมและผู้จัดการล่าสุด.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
-        st.info("💡 ปัจจุบันยังไม่มีข้อมูลโรงแรมในระบบฐานข้อมูล ลองไปเพิ่มข้อมูลที่แท็บด้านบนได้เลยครับ")
-
-with tab2:
-    st.markdown("### 📝 ฟอร์มลงทะเบียนโรงแรมและใบอนุญาตตัวใหม่")
-    
-    with st.form("hotel_add_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            h_name = st.text_input("ชื่อโรงแรม *")
-            h_type = st.selectbox("ประเภทโรงแรม *", [
-                "ประเภท 1 (เฉพาะห้องพัก)", 
-                "ประเภท 2 (ห้องพัก + ห้องอาหาร)", 
-                "ประเภท 3 (ห้องพัก + อาหาร + สถานบริการ)", 
-                "ประเภท 4"
-            ])
-            h_owner = st.text_input("ชื่อผู้ประกอบการ / เจ้าของ *")
-            h_rooms = st.number_input("จำนวนห้องพักทั้งหมด *", min_value=1, step=1)
-        
-        with c2:
-            h_tel = st.text_input("เบอร์โทรศัพท์ติดต่อ")
-            l_no = st.text_input("เลขที่ใบอนุญาต ร.บ. 2 *")
-            l_issue = st.date_input("วันที่ออกใบอนุญาต", date.today())
-            l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", date.today())
-            l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", ["จ่ายแล้ว", "ค้างชำระ"])
-            
-        st.markdown("---")
-        st.markdown("**📍 ข้อมูลที่อยู่ตำแหน่งโรงแรม**")
-        addr_col1, addr_col2 = st.columns([1, 2])
-        with addr_col1:
-            h_subdistrict = st.selectbox("เลือกตำบล/เขตเทศบาล *", SUBDISTRICTS)
-        with addr_col2:
-            h_address_detail = st.text_input("ที่อยู่เพิ่มเติม (ระบุเลขที่บ้าน, หมู่ที่, ถนน, ซอย) *", placeholder="เช่น 123/4 หมู่ 2 ถนนสละชีพ")
-            
-        submit_btn = st.form_submit_button("💾 บันทึกข้อมูลลงเครื่อง")
-        
-        if submit_btn:
-            if not h_name or not h_owner or not l_no or not h_address_detail:
-                st.error("❌ กรุณากรอกข้อมูลในช่องที่มีเครื่องหมาย * รวมถึงรายละเอียดที่อยู่ให้ครบถ้วน")
-            else:
-                full_address = f"{h_address_detail} {h_subdistrict}"
-                
-                conn = get_connection()
-                try:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO hotels (hotel_name, hotel_type, owner_name, total_rooms, tel, address)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (h_name, h_type, h_owner, h_rooms, h_tel, full_address))
-                    
-                    last_id = cursor.lastrowid
-                    
-                    cursor.execute("""
-                        INSERT INTO licenses (hotel_id, license_no, issue_date, expiry_date, fee_status)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (last_id, l_no, str(l_issue), str(l_expiry), l_fee))
-                    
-                    conn.commit()
-                    st.success(f"🎉 บันทึกข้อมูลโรงแรม '{h_name}' ลงทะเบียนเรียบร้อยแล้ว!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล: {e}")
-                finally:
-                    conn.close()
+        st.info("ℹ️ ยังไม่มีข้อมูลบันทึกในระบบในขณะนี้")
