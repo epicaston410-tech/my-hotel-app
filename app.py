@@ -18,7 +18,7 @@ def get_connection():
     conn = sqlite3.connect(DB_FILE)
     return conn
 
-# ฟังก์ชันสร้างตารางเริ่มต้น (เพิ่มคอลัมน์ผู้จัดการเรียบร้อย)
+# ฟังก์ชันสร้างตารางเริ่มต้น
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
@@ -47,15 +47,15 @@ def init_db():
         )
     """)
     
-    # ตรวจสอบและอัปเดตโครงสร้างฐานข้อมูลเดิม (กรณีที่ยังไม่มีคอลัมน์ผู้จัดการเพื่อไม่ให้ระบบพัง)
+    # อัปเดตโครงสร้างฐานข้อมูลเดิมป้องกันระบบพัง
     try:
         cursor.execute("ALTER TABLE hotels ADD COLUMN manager_name TEXT")
     except sqlite3.OperationalError:
-        pass  # มีคอลัมน์อยู่แล้ว
+        pass
     try:
         cursor.execute("ALTER TABLE hotels ADD COLUMN manager_tel TEXT")
     except sqlite3.OperationalError:
-        pass  # มีคอลัมน์อยู่แล้ว
+        pass
 
     conn.commit()
     conn.close()
@@ -72,26 +72,39 @@ SUBDISTRICTS = [
     "เขตเทศบาลเมืองประจวบคีรีขันธ์"
 ]
 
+# ข้อ 3: เพิ่มตัวเลือกประเภทโรงแรม (เพิ่ม ประเภท 5)
+HOTEL_TYPES = [
+    "ประเภท 1 (เฉพาะห้องพัก)", 
+    "ประเภท 2 (ห้องพัก + ห้องอาหาร)", 
+    "ประเภท 3 (ห้องพัก + อาหาร + สถานบริการ)", 
+    "ประเภท 4",
+    "ประเภท 5 ไม่เป็นโรงแรม"
+]
+
+# ข้อ 3: เพิ่มตัวเลือกสถานะค่าธรรมเนียม (เพิ่ม ไม่มีค่าธรรมเนียม)
+FEE_STATUS_OPTIONS = ["จ่ายแล้ว", "ค้างชำระ", "ไม่มีค่าธรรมเนียม"]
+
 def load_data():
     conn = get_connection()
+    # ข้อ 1: เปลี่ยนคำสั่งเรียงลำดับจาก ORDER BY h.hotel_name เป็น ORDER BY l.license_no ASC (เรียงตามใบอนุญาต)
     query = """
         SELECT 
             h.id AS 'รหัสระบบ',
+            l.license_no AS 'เลขที่ใบอนุญาต (ร.บ.2)',
             h.hotel_name AS 'ชื่อโรงแรม',
             h.hotel_type AS 'ประเภทโรงแรม',
             h.owner_name AS 'ชื่อผู้ประกอบการ',
             h.manager_name AS 'ชื่อผู้จัดการโรงแรม (หน้างาน)',
-            h.manager_tel AS 'เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)',
             h.total_rooms AS 'จำนวนห้องพัก',
-            h.tel AS 'เบอร์โทรศัพท์เจ้าของ',
-            l.license_no AS 'เลขที่ใบอนุญาต (ร.บ.2)',
             l.issue_date AS 'วันออกใบอนุญาต',
             l.expiry_date AS 'วันหมดอายุ',
             l.fee_status AS 'สถานะค่าธรรมเนียมรายปี',
-            h.address AS 'ที่อยู่'
+            h.address AS 'ที่อยู่',
+            h.tel AS 'เบอร์โทรศัพท์เจ้าของ',
+            h.manager_tel AS 'เบอร์โทรศัพท์ผู้จัดการ'
         FROM hotels h
         LEFT JOIN licenses l ON h.id = l.hotel_id
-        ORDER BY h.hotel_name ASC
+        ORDER BY l.license_no ASC
     """
     try:
         df = pd.read_sql(query, con=conn)
@@ -176,18 +189,43 @@ with tab1:
         st.markdown("---")
 
         st.markdown("### 🔍 ค้นหาข้อมูลโรงแรม")
-        search_query = st.text_input("พิมพ์ชื่อโรงแรม, ชื่อเจ้าของ, ชื่อผู้จัดการ หรือชื่อตำบล/เทศบาล เพื่อค้นหา...")
+        search_query = st.text_input("พิมพ์ชื่อโรงแรม, เลขใบอนุญาต, ชื่อผู้จัดการ หรือชื่อตำบล เพื่อค้นหา...")
         
         df_filtered = df_source.copy()
         if search_query:
             df_filtered = df_filtered[
                 df_filtered['ชื่อโรงแรม'].str.contains(search_query, na=False) | 
+                df_filtered['เลขที่ใบอนุญาต (ร.บ.2)'].str.contains(search_query, na=False) | 
                 df_filtered['ชื่อผู้ประกอบการ'].str.contains(search_query, na=False) |
                 df_filtered['ชื่อผู้จัดการโรงแรม (หน้างาน)'].str.contains(search_query, na=False) |
                 df_filtered['ที่อยู่'].str.contains(search_query, na=False)
             ]
 
         st.markdown("### 📋 ตารางข้อมูลสถานะล่าสุด")
+        
+        # ข้อ 2: คำนวณเงื่อนไขสลับเบอร์ติดต่อ (ถ้าไม่มีผู้จัดการ หรือไม่มีเบอร์ผู้จัดการ ให้ดึงเบอร์เจ้าของมาแทน)
+        contact_phones = []
+        for idx, row in df_filtered.iterrows():
+            m_tel = row['เบอร์โทรศัพท์ผู้จัดการ']
+            o_tel = row['เบอร์โทรศัพท์เจ้าของ']
+            m_name = row['ชื่อผู้จัดการโรงแรม (หน้างาน)']
+            
+            # ถ้าไม่มีชื่อผู้จัดการ หรือไม่มีเบอร์ผู้จัดการ ให้ใช้เบอร์เจ้าของ
+            if pd.isnull(m_name) or str(m_name).strip() == "" or pd.isnull(m_tel) or str(m_tel).strip() == "":
+                contact_phones.append(o_tel if (pd.notnull(o_tel) and str(o_tel).strip() != "") else "-")
+            else:
+                contact_phones.append(m_tel)
+                
+        df_filtered['เบอร์โทรติดต่อหน้างาน'] = contact_phones
+
+        # ข้อ 1 & 2: จัดระเบียบลำดับคอลัมน์ใหม่ (เอาเลขที่ขึ้นก่อน ย้ายเบอร์ติดต่อด่วนไปไว้ท้ายสุด)
+        display_cols = [
+            'เลขที่ใบอนุญาต (ร.บ.2)', 'ชื่อโรงแรม', 'ประเภทโรงแรม', 
+            'ชื่อผู้ประกอบการ', 'ชื่อผู้จัดการโรงแรม (หน้างาน)', 'จำนวนห้องพัก', 
+            'วันออกใบอนุญาต', 'วันหมดอายุ', 'วันคงเหลือ (วัน)', 
+            'สถานะใบอนุญาต', 'สถานะค่าธรรมเนียมรายปี', 'ที่อยู่', 'เบอร์โทรติดต่อหน้างาน'
+        ]
+        
         items_per_page = 20
         total_items = len(df_filtered)
         
@@ -207,7 +245,9 @@ with tab1:
             end_idx = min(start_idx + items_per_page, total_items)
             
             df_page = df_filtered.iloc[start_idx:end_idx]
-            st.dataframe(df_page, use_container_width=True)
+            
+            # ดึงเฉพาะคอลัมน์ที่จัดระเบียบใหม่มาแสดงผล
+            st.dataframe(df_page[display_cols], use_container_width=True)
             
             p_col1, p_col2, p_col3, p_col4 = st.columns([2, 3, 2, 5])
             with p_col1:
@@ -235,7 +275,7 @@ with tab1:
         st.markdown("---")
         
         st.markdown("### ⚙️ จัดการข้อมูลการจัดการระดับโรงแรม (แก้ไข/ลบข้อมูล)")
-        hotel_list = {f"[{row['รหัสระบบ']}] {row['ชื่อโรงแรม']} - เจ้าของ: {row['ชื่อผู้ประกอบการ']}": row['รหัสระบบ'] for idx, row in df_filtered.iterrows()}
+        hotel_list = {f"[{row['รหัสระบบ']}] ใบอนุญาต: {row['เลขที่ใบอนุญาต (ร.บ.2)']} - {row['ชื่อโรงแรม']}": row['รหัสระบบ'] for idx, row in df_filtered.iterrows()}
         selected_hotel_str = st.selectbox("เลือกโรงแรมที่ต้องการจัดการข้อมูล:", ["-- กรุณาเลือกโรงแรม --"] + list(hotel_list.keys()))
         
         if selected_hotel_str != "-- กรุณาเลือกโรงแรม --":
@@ -249,17 +289,19 @@ with tab1:
                     ec1, ec2 = st.columns(2)
                     with ec1:
                         edit_name = st.text_input("ชื่อโรงแรม *", value=str(hotel_row['ชื่อโรงแรม']))
-                        types = ["ประเภท 1 (เฉพาะห้องพัก)", "ประเภท 2 (ห้องพัก + ห้องอาหาร)", "ประเภท 3 (ห้องพัก + อาหาร + สถานบริการ)", "ประเภท 4"]
-                        try: default_type_idx = types.index(hotel_row['ประเภทโรงแรม'])
+                        
+                        # ข้อ 3: ดึงรายการประเภทโรงแรมชุดใหม่มาให้เลือกในฟอร์มแก้ไข
+                        try: default_type_idx = HOTEL_TYPES.index(hotel_row['ประเภทโรงแรม'])
                         except: default_type_idx = 0
-                        edit_type = st.selectbox("ประเภทโรงแรม *", types, index=default_type_idx)
+                        edit_type = st.selectbox("ประเภทโรงแรม *", HOTEL_TYPES, index=default_type_idx)
+                        
                         edit_owner = st.text_input("ชื่อผู้ประกอบการ / เจ้าของ *", value=str(hotel_row['ชื่อผู้ประกอบการ']))
                         edit_manager = st.text_input("ชื่อผู้จัดการโรงแรม (หน้างาน)", value=str(hotel_row['ชื่อผู้จัดการโรงแรม (หน้างาน)']) if hotel_row['ชื่อผู้จัดการโรงแรม (หน้างาน)'] else "")
                         edit_rooms = st.number_input("จำนวนห้องพักทั้งหมด *", min_value=1, step=1, value=int(hotel_row['จำนวนห้องพัก']))
                     
                     with ec2:
                         edit_tel = st.text_input("เบอร์โทรศัพท์เจ้าของ", value=str(hotel_row['เบอร์โทรศัพท์เจ้าของ']) if hotel_row['เบอร์โทรศัพท์เจ้าของ'] else "")
-                        edit_manager_tel = st.text_input("เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)", value=str(hotel_row['เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)']) if hotel_row['เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)'] else "")
+                        edit_manager_tel = st.text_input("เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)", value=str(hotel_row['เบอร์โทรศัพท์ผู้จัดการ']) if hotel_row['เบอร์โทรศัพท์'] else "")
                         edit_l_no = st.text_input("เลขที่ใบอนุญาต ร.บ. 2 *", value=str(hotel_row['เลขที่ใบอนุญาต (ร.บ.2)']) if hotel_row['เลขที่ใบอนุญาต (ร.บ.2)'] else "")
                         
                         try: current_issue = datetime.strptime(str(hotel_row['วันออกใบอนุญาต']), "%Y-%m-%d").date()
@@ -270,10 +312,10 @@ with tab1:
                         edit_l_issue = st.date_input("วันที่ออกใบอนุญาต", current_issue)
                         edit_l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", current_expiry)
                         
-                        fees = ["จ่ายแล้ว", "ค้างชำระ"]
-                        try: default_fee_idx = fees.index(hotel_row['สถานะค่าธรรมเนียมรายปี'])
+                        # ข้อ 3: ดึงรายการสถานะค่าธรรมเนียมชุดใหม่ (รวมไม่มีค่าธรรมเนียม) ในฟอร์มแก้ไข
+                        try: default_fee_idx = FEE_STATUS_OPTIONS.index(hotel_row['สถานะค่าธรรมเนียมรายปี'])
                         except: default_fee_idx = 0
-                        edit_l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", fees, index=default_fee_idx)
+                        edit_l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", FEE_STATUS_OPTIONS, index=default_fee_idx)
                     
                     st.markdown("**📍 แก้ไขข้อมูลที่อยู่ตำแหน่งโรงแรม**")
                     current_full_address = str(hotel_row['ที่อยู่']) if hotel_row['ที่อยู่'] else ""
@@ -330,7 +372,8 @@ with tab1:
                         st.rerun()
         
         st.markdown("---")
-        excel_file = to_excel(df_filtered)
+        # ส่งออกไฟล์ Excel ตามการจัดระเบียบคอลัมน์ใหม่
+        excel_file = to_excel(df_filtered[display_cols])
         st.download_button(
             label="📥 ปริ้นสรุปข้อมูล: ดาวน์โหลดรายงาน (Excel)",
             data=excel_file,
@@ -347,12 +390,8 @@ with tab2:
         c1, c2 = st.columns(2)
         with c1:
             h_name = st.text_input("ชื่อโรงแรม *")
-            h_type = st.selectbox("ประเภทโรงแรม *", [
-                "ประเภท 1 (เฉพาะห้องพัก)", 
-                "ประเภท 2 (ห้องพัก + ห้องอาหาร)", 
-                "ประเภท 3 (ห้องพัก + อาหาร + สถานบริการ)", 
-                "ประเภท 4"
-            ])
+            # ข้อ 3: อัปเดตตัวเลือกประเภทโรงแรมในหน้าบันทึกใหม่ (มีประเภท 5 แล้ว)
+            h_type = st.selectbox("ประเภทโรงแรม *", HOTEL_TYPES)
             h_owner = st.text_input("ชื่อผู้ประกอบการ / เจ้าของ *")
             h_manager = st.text_input("ชื่อผู้จัดการโรงแรม (หน้างาน)")
             h_rooms = st.number_input("จำนวนห้องพักทั้งหมด *", min_value=1, step=1)
@@ -363,7 +402,8 @@ with tab2:
             l_no = st.text_input("เลขที่ใบอนุญาต ร.บ. 2 *")
             l_issue = st.date_input("วันที่ออกใบอนุญาต", date.today())
             l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", date.today())
-            l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", ["จ่ายแล้ว", "ค้างชำระ"])
+            # ข้อ 3: อัปเดตตัวเลือกสถานะค่าธรรมเนียมในหน้าบันทึกใหม่ (มีไม่มีค่าธรรมเนียมแล้ว)
+            l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", FEE_STATUS_OPTIONS)
             
         st.markdown("---")
         st.markdown("**📍 ข้อมูลที่อยู่ตำแหน่งโรงแรม**")
