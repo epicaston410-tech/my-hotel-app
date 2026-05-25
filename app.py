@@ -40,7 +40,7 @@ st.html(f"""
         <img src='{img_src}' style='width: 120px; height: auto; object-fit: contain;' onerror="this.src='https://img.icons8.com/color/96/000000/goverment.png';">
         <div style='text-align: left;'>
             <h1 style='font-size: 38px; font-weight: bold; margin: 0 0 5px 0; color: #003366;'>
-                🏨 &nbsp;ระบบงานทะเบียนโรงแรม
+                 &nbsp;ระบบงานทะเบียนโรงแรม
             </h1>
             <h2 style='font-size: 24px; font-weight: normal; color: #555555; margin: 0;'>
                 กรมการปกครอง ที่ว่าการอำเภอเมืองประจวบคีรีขันธ์
