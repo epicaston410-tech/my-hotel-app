@@ -5,7 +5,7 @@ import io
 import requests
 
 # 🚨 พี่ยัดลิงก์ Google Form ที่สร้างจากตัวชีตมาวางตรงนี้ได้เลยครับ!
-FORM_URL = "https://docs.google.com/forms/d/e/YOUR_FORM_ID_HERE/formResponse"
+FORM_URL = "https://docs.google.com/spreadsheets/d/1_9v8bcWkwqclpEQE8lIjRoONzkERoDIhSbJchzYsoOk/edit?usp=sharing"
 
 # 1. ตั้งค่าหน้าเว็บให้ขยายเต็มจอ
 st.set_page_config(page_title="ระบบทะเบียนโรงแรม - อำเภอเมืองประจวบฯ", layout="wide")
