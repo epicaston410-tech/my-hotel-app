@@ -1,16 +1,37 @@
 import streamlit as st
+from PIL import Image
 import pandas as pd
 import sqlite3
 from datetime import date, datetime
 import io
+import os
+import base64  # เพิ่มเพื่อใช้แปลงไฟล์รูปภาพจากโฟลเดอร์ static
 
 # 1. ตั้งค่าหน้าเว็บให้กว้างและสะอาด สไตล์งานราชการ
 st.set_page_config(page_title="ระบบทะเบียนโรงแรม - อำเภอ", layout="wide")
 
-# --- ส่วนหัวของระบบ: ใช้ st.html สำหรับ Python 3.14 ป้องกันหน้าจอแดง ---
-st.html("""
+# --- ฟังก์ชันดึงรูปภาพจากโฟลเดอร์ static และแปลงเป็น Base64 ---
+def get_image_base64(image_path):
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    return ""
+
+# ดึงรูปจากโฟลเดอร์ static (ปรับชื่อไฟล์เป็น dopa.png หรือชื่อที่พี่ตั้งไว้ได้เลยครับ)
+IMAGE_PATH = os.path.join("static", "dopa.png")
+img_base64 = get_image_base64(IMAGE_PATH)
+
+# กำหนดแหล่งที่มารูปภาพ: ถ้ามีไฟล์ในโฟลเดอร์ static ให้ใช้ Base64 ถ้าไม่มีให้ใช้รูปสำรอง
+if img_base64:
+    img_src = f"data:image/png;base64,{img_base64}"
+else:
+    # กรณีหาไฟล์ในโฟลเดอร์ไม่เจอ จะใช้ลิงก์ตรงป้องกันระบบแสดงผลพัง
+    img_src = "https://stat.bora.dopa.go.th/stat/images/dopa.png"
+
+# --- ส่วนหัวของระบบ: ดึงรูปภาพจากโฟลเดอร์ static ที่แปลงค่าแล้ว ---
+st.html(f"""
     <div style='display: flex; align-items: center; gap: 20px; margin-bottom: 25px; padding: 10px;'>
-        <img src='https://stat.bora.dopa.go.th/stat/images/dopa.png' style='width: 100px; height: auto;'>
+        <img src='{img_src}' style='width: 100px; height: auto;'>
         <div style='text-align: left;'>
             <h1 style='font-size: 38px; font-weight: bold; margin: 0 0 5px 0; color: #FFFFFF;'>
                 🏨 &nbsp;ระบบงานทะเบียนโรงแรม
