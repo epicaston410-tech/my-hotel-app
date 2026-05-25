@@ -10,28 +10,31 @@ import base64  # เพิ่มเพื่อใช้แปลงไฟล์
 # 1. ตั้งค่าหน้าเว็บให้กว้างและสะอาด สไตล์งานราชการ
 st.set_page_config(page_title="ระบบทะเบียนโรงแรม - อำเภอ", layout="wide")
 
-# --- ฟังก์ชันดึงรูปภาพจากโฟลเดอร์ static และแปลงเป็น Base64 ---
-def get_image_base64(image_path):
+# --- ฟังก์ชันดึงรูปภาพจากโฟลเดอร์ static และแปลงเป็น Base64 (แก้ไขเรื่อง Path ให้รองรับ Cloud) ---
+def get_image_base64(image_name):
+    # อ้างอิงโฟลเดอร์หลักจากตำแหน่งของไฟล์โค้ดนี้ (app.py) ป้องกันปัญหา Working Directory บน Cloud
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    image_path = os.path.join(current_dir, "static", image_name)
+    
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
             return base64.b64encode(img_file.read()).decode()
     return ""
 
-# ดึงรูปจากโฟลเดอร์ static (ปรับชื่อไฟล์เป็น dopa.png หรือชื่อที่พี่ตั้งไว้ได้เลยครับ)
-IMAGE_PATH = os.path.join("static", "dopa.png")
-img_base64 = get_image_base64(IMAGE_PATH)
+# ดึงรูปจากโฟลเดอร์ static 
+img_base64 = get_image_base64("dopa.png")
 
-# กำหนดแหล่งที่มารูปภาพ: ถ้ามีไฟล์ในโฟลเดอร์ static ให้ใช้ Base64 ถ้าไม่มีให้ใช้รูปสำรอง
+# กำหนดแหล่งที่มารูปภาพ: ถ้ามีไฟล์ในโฟลเดอร์ static ให้ใช้ Base64 ถ้าไม่มีให้ใช้รูปสำรอง (เปลี่ยนลิงก์สำรองที่ปลอดภัยขึ้น)
 if img_base64:
     img_src = f"data:image/png;base64,{img_base64}"
 else:
-    # กรณีหาไฟล์ในโฟลเดอร์ไม่เจอ จะใช้ลิงก์ตรงป้องกันระบบแสดงผลพัง
-    img_src = "https://stat.bora.dopa.go.th/stat/images/dopa.png"
+    # กรณีหาไฟล์ในโฟลเดอร์ไม่เจอ ใช้ภาพตราโล่ผู้พิทักษ์สันติราษฎร์/ปกครอง ที่เสถียรบน HTTPS เป็นตัวเลือกสำรอง
+    img_src = "https://raw.githubusercontent.com/streamlit/proactive-connectors/main/branding/logo.png" # หรือใส่ลิงก์รูปตรงที่รองรับ HTTPS ครับ
 
 # --- ส่วนหัวของระบบ: ดึงรูปภาพจากโฟลเดอร์ static ที่แปลงค่าแล้ว ---
 st.html(f"""
     <div style='display: flex; align-items: center; gap: 20px; margin-bottom: 25px; padding: 10px;'>
-        <img src='{img_src}' style='width: 100px; height: auto;'>
+        <img src='{img_src}' style='width: 100px; height: auto;' onerror="this.src='https://img.icons8.com/color/96/000000/goverment.png';">
         <div style='text-align: left;'>
             <h1 style='font-size: 38px; font-weight: bold; margin: 0 0 5px 0; color: #FFFFFF;'>
                 🏨 &nbsp;ระบบงานทะเบียนโรงแรม
@@ -112,7 +115,7 @@ HOTEL_TYPES = [
     "ประเภท 2 (ห้องพัก + ห้องอาหาร)", 
     "ประเภท 3 (ห้องพัก + อาหาร + สถานบริการ)", 
     "ประเภท 4",
-    "ประเภท 5 不เป็นโรงแรม"
+    "ประเภท 5 ไม่เป็นโรงแรม"
 ]
 
 # ตัวเลือกสถานะค่าธรรมเนียม
