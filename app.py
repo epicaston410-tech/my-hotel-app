@@ -7,8 +7,29 @@ import io
 # 1. ตั้งค่าหน้าเว็บให้ดูสะอาด สไตล์งานราชการ
 st.set_page_config(page_title="ระบบทะเบียนโรงแรม - อำเภอ", layout="wide")
 
-st.title("🏨 ระบบงานทะเบียนโรงแรม")
-st.subheader("กรมการปกครอง ที่ว่าการอำเภอเมืองประจวบคีรีขันธ์")
+# --- ส่วนที่ 1: ตรากรมการปกครองส่วนกึ่งกลางหน้าจอ ---
+col_logo1, col_logo2, col_logo3 = st.columns([2, 1, 2])
+with col_logo2:
+    st.image(
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Seal_of_the_Department_of_Provincial_Administration_%28Thailand%29.svg/512px-Seal_of_the_Department_of_Provincial_Administration_%28Thailand%29.svg.png", 
+        use_container_width=True
+    )
+
+st.markdown("<br>", unsafe_html=True)
+
+# --- ส่วนที่ 2: หัวข้อระบบพร้อมไอคอนและข้อความตามรูปต้นแบบเป๊ะ ๆ ---
+# ถอดรหัสโครงสร้างข้อความและฟอนต์ให้ตรงตามสเปกงานทะเบียนอำเภอเมืองประจวบฯ
+st.markdown("""
+    <div style='text-align: left; margin-bottom: 20px;'>
+        <h1 style='font-size: 42px; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center;'>
+            🏨 &nbsp;ระบบงานทะเบียนโรงแรม
+        </h1>
+        <h2 style='font-size: 26px; font-weight: normal; color: #FFFFFF; margin-top: 0px;'>
+            กรมการปกครอง ที่ว่าการอำเภอเมืองประจวบคีรีขันธ์
+        </h2>
+    </div>
+""", unsafe_html=True)
+
 st.markdown("---")
 
 # 2. ฟังก์ชันเชื่อมต่อฐานข้อมูล SQLite
@@ -72,7 +93,7 @@ SUBDISTRICTS = [
     "เขตเทศบาลเมืองประจวบคีรีขันธ์"
 ]
 
-# เพิ่มตัวเลือกประเภทโรงแรม (เพิ่ม ประเภท 5)
+# ตัวเลือกประเภทโรงแรม
 HOTEL_TYPES = [
     "ประเภท 1 (เฉพาะห้องพัก)", 
     "ประเภท 2 (ห้องพัก + ห้องอาหาร)", 
@@ -81,12 +102,11 @@ HOTEL_TYPES = [
     "ประเภท 5 ไม่เป็นโรงแรม"
 ]
 
-# เพิ่มตัวเลือกสถานะค่าธรรมเนียม (เพิ่ม ไม่มีค่าธรรมเนียม)
+# ตัวเลือกสถานะค่าธรรมเนียม
 FEE_STATUS_OPTIONS = ["จ่ายแล้ว", "ค้างชำระ", "ไม่มีค่าธรรมเนียม"]
 
 def load_data():
     conn = get_connection()
-    # ดึงข้อมูลพร้อมตั้งชื่อคอลัมน์ภาษาไทยให้ชัดเจน และดึงคอลัมน์ดิบมาเก็บไว้ตรวจสอบด้วย
     query = """
         SELECT 
             h.id AS 'รหัสระบบ',
@@ -136,12 +156,10 @@ def to_excel(df_data):
             df_excel[col] = df_excel[col].astype(str)
             
     output = io.BytesIO()
-    # ใช้ engine='openpyxl' (หากมีปัญหาตัวนี้ระบบจะไม่ค้าง)
     try:
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_excel.to_excel(writer, index=False, sheet_name='รายงานทะเบียนโรงแรม')
     except:
-        # Fallback ในกรณีที่สตรีมลิตคลาวด์ยังอัปเดตไฟล์ก้อนแพ็กเกจไม่เสร็จ
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df_excel.to_excel(writer, index=False, sheet_name='รายงานทะเบียนโรงแรม')
             
@@ -189,7 +207,7 @@ with tab1:
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("โรงแรมทั้งหมดในอำเภอ", len(df_source))
-        col2.metric("🟢 Status ปกติ", len(df_source[df_source['App Status'] == "🟢 ปกติ" if 'App Status' in df_source else df_source['สถานะใบอนุญาต'] == "🟢 ปกติ"]))
+        col2.metric("🟢 Status ปกติ", len(df_source[df_source['สถานะใบอนุญาต'] == "🟢 ปกติ"]))
         col3.metric("🟡 ใกล้หมดอายุ", len(df_source[df_source['สถานะใบอนุญาต'] == "🟡 ใกล้หมดอายุ (น้อยกว่า 90 วัน)"]))
         col4.metric("🔴 หมดอายุแล้ว", len(df_source[df_source['สถานะใบอนุญาต'] == "🔴 หมดอายุแล้ว"]))
         
@@ -210,7 +228,6 @@ with tab1:
 
         st.markdown("### 📋 ตารางข้อมูลสถานะล่าสุด")
         
-        # เงื่อนไขสลับเบอร์ติดต่ออัตโนมัติป้องกันช่องว่าง
         contact_phones = []
         for idx, row in df_filtered.iterrows():
             m_tel = row['เบอร์โทรศัพท์ผู้จัดการ']
@@ -224,7 +241,6 @@ with tab1:
                 
         df_filtered['เบอร์โทรติดต่อหน้างาน'] = contact_phones
 
-        # จัดระเบียบลำดับคอลัมน์หน้าจอ
         display_cols = [
             'เลขที่ใบอนุญาต (ร.บ.2)', 'ชื่อโรงแรม', 'ประเภทโรงแรม', 
             'ชื่อผู้ประกอบการ', 'ชื่อผู้จัดการโรงแรม (หน้างาน)', 'จำนวนห้องพัก', 
@@ -290,7 +306,6 @@ with tab1:
             with edit_col:
                 st.info(f"📝 ฟอร์มแก้ไขข้อมูล: {hotel_row['ชื่อโรงแรม']}")
                 
-                # บั๊กเดิมเกิดจากปุ่ม Submit ผิดตำแหน่ง และคีย์ชื่อคอลัมน์ไม่ตรง
                 with st.form(f"edit_form_{selected_id}"):
                     ec1, ec2 = st.columns(2)
                     with ec1:
@@ -305,7 +320,6 @@ with tab1:
                         edit_rooms = st.number_input("จำนวนห้องพักทั้งหมด *", min_value=1, step=1, value=int(hotel_row['จำนวนห้องพัก']))
                     
                     with ec2:
-                        # 🔎 แก้ไขบั๊กคอลัมน์ชื่อตรงนี้ให้ถูกต้องตรงกับที่ SELECT (เบอร์โทรศัพท์เจ้าของ / เบอร์โทรศัพท์ผู้จัดการ)
                         edit_tel = st.text_input("เบอร์โทรศัพท์เจ้าของ", value=str(hotel_row['เบอร์โทรศัพท์เจ้าของ']) if hotel_row['เบอร์โทรศัพท์เจ้าของ'] and str(hotel_row['เบอร์โทรศัพท์เจ้าของ']) != 'None' else "")
                         edit_manager_tel = st.text_input("เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)", value=str(hotel_row['เบอร์โทรศัพท์ผู้จัดการ']) if hotel_row['เบอร์โทรศัพท์ผู้จัดการ'] and str(hotel_row['เบอร์โทรศัพท์ผู้จัดการ']) != 'None' else "")
                         edit_l_no = st.text_input("เลขที่ใบอนุญาต ร.บ. 2 *", value=str(hotel_row['เลขที่ใบอนุญาต (ร.บ.2)']) if hotel_row['เลขที่ใบอนุญาต (ร.บ.2)'] and str(hotel_row['เลขที่ใบอนุญาต (ร.บ.2)']) != 'None' else "")
@@ -335,7 +349,6 @@ with tab1:
                     clean_address_detail = current_full_address.replace(edit_subdistrict, "").strip()
                     edit_address_detail = st.text_input("ที่อยู่เพิ่มเติม (เลขที่, หมู่, ถนน, ซอย) *", value=clean_address_detail)
                     
-                    # เลื่อนย้ายปุ่มมาไว้ในบล็อก st.form เสมอเพื่อแก้ปัญหา Missing Submit Button
                     update_btn = st.form_submit_button("🆙 อัปเดตข้อมูลที่แก้ไข")
                     
                     if update_btn:
