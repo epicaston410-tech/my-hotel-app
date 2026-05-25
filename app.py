@@ -7,26 +7,21 @@ import io
 # 1. ตั้งค่าหน้าเว็บให้กว้างและสะอาด สไตล์งานราชการ
 st.set_page_config(page_title="ระบบทะเบียนโรงแรม - อำเภอ", layout="wide")
 
-# --- แก้ไขจุดพัง: ใช้ตาราง layout คุมรูปภาพโลโก้และข้อความให้อยู่ในระนาบเดียวกันอย่างมั่นคง ---
-logo_left, logo_center, logo_right = st.columns([1, 6, 1])
-
-with logo_center:
-    # เปลี่ยนมาใช้ลิงก์ตรงจากโดเมนสำนักบริหารการทะเบียน (BORA) เสถียร 100% ไม่พังง่าย
-    st.image(
-        "https://stat.bora.dopa.go.th/stat/images/dopa.png", 
-        width=120
-    )
-    # แสดงหัวข้อระบบพร้อมไอคอนและข้อความถอดพิมพ์เขียวจากรูปต้นแบบ
-    st.markdown("""
-        <div style='text-align: left; margin-top: 10px; margin-bottom: 20px;'>
-            <h1 style='font-size: 38px; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center;'>
+# --- แก้ไขจุดพังสำหรับ Python 3.14: ใช้ตารางมาตรฐานจัดตำแหน่งแทนการแบ่งคอลัมน์ซ้อน ---
+# ปรับมาใช้ st.html() แทน st.markdown(unsafe_html=True) เพื่อป้องกัน TypeError หน้าจอแดง
+st.html("""
+    <div style='display: flex; align-items: center; gap: 20px; margin-bottom: 25px; padding: 10px;'>
+        <img src='https://stat.bora.dopa.go.th/stat/images/dopa.png' style='width: 100px; height: auto;'>
+        <div style='text-align: left;'>
+            <h1 style='font-size: 38px; font-weight: bold; margin: 0 0 5px 0; color: #FFFFFF;'>
                 🏨 &nbsp;ระบบงานทะเบียนโรงแรม
             </h1>
-            <h2 style='font-size: 24px; font-weight: normal; color: #CCCCCC; margin-top: 0px;'>
+            <h2 style='font-size: 24px; font-weight: normal; color: #CCCCCC; margin: 0;'>
                 กรมการปกครอง ที่ว่าการอำเภอเมืองประจวบคีรีขันธ์
             </h2>
         </div>
-    """, unsafe_html=True)
+    </div>
+""")
 
 st.markdown("---")
 
@@ -330,7 +325,7 @@ with tab1:
                         edit_l_issue = st.date_input("วันที่ออกใบอนุญาต", current_issue)
                         edit_l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", current_expiry)
                         
-                        try: default_fee_idx = FEE_STATUS_OPTIONS.index(hotel_row['สถานะค่าธรรมเนียมรายปี'])
+                        try: default_fee_idx = FEE_STATUS_OPTIONS.index(hotel_row['Warm_Up_Fee_Status'])
                         except: default_fee_idx = 0
                         edit_l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", FEE_STATUS_OPTIONS, index=default_fee_idx)
                     
