@@ -7,8 +7,7 @@ import io
 # 1. ตั้งค่าหน้าเว็บให้กว้างและสะอาด สไตล์งานราชการ
 st.set_page_config(page_title="ระบบทะเบียนโรงแรม - อำเภอ", layout="wide")
 
-# --- แก้ไขจุดพังสำหรับ Python 3.14: ใช้ตารางมาตรฐานจัดตำแหน่งแทนการแบ่งคอลัมน์ซ้อน ---
-# ปรับมาใช้ st.html() แทน st.markdown(unsafe_html=True) เพื่อป้องกัน TypeError หน้าจอแดง
+# --- ส่วนหัวของระบบ: ใช้ st.html สำหรับ Python 3.14 ป้องกันหน้าจอแดง ---
 st.html("""
     <div style='display: flex; align-items: center; gap: 20px; margin-bottom: 25px; padding: 10px;'>
         <img src='https://stat.bora.dopa.go.th/stat/images/dopa.png' style='width: 100px; height: auto;'>
@@ -92,7 +91,7 @@ HOTEL_TYPES = [
     "ประเภท 2 (ห้องพัก + ห้องอาหาร)", 
     "ประเภท 3 (ห้องพัก + อาหาร + สถานบริการ)", 
     "ประเภท 4",
-    "ประเภท 5 ไม่เป็นโรงแรม"
+    "ประเภท 5 不เป็นโรงแรม"
 ]
 
 # ตัวเลือกสถานะค่าธรรมเนียม
@@ -325,7 +324,6 @@ with tab1:
                         edit_l_issue = st.date_input("วันที่ออกใบอนุญาต", current_issue)
                         edit_l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", current_expiry)
                         
-                        # 🌟 แก้ไขจุด KeyError ตรงนี้: ดึงข้อมูลจากคีย์ 'สถานะค่าธรรมเนียมรายปี' ที่มีอยู่จริงใน DataFrame แทนตัวแปรเดิม
                         try: default_fee_idx = FEE_STATUS_OPTIONS.index(hotel_row['สถานะค่าธรรมเนียมรายปี'])
                         except: default_fee_idx = 0
                         edit_l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", FEE_STATUS_OPTIONS, index=default_fee_idx)
