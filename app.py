@@ -34,13 +34,13 @@ if img_base64:
 else:
     img_src = "https://raw.githubusercontent.com/streamlit/proactive-connectors/main/branding/logo.png"
 
-# --- ส่วนหัวของระบบ ---
+# --- ส่วนหัวของระบบ (แก้สีโลโก้และสีตัวอักษรแล้ว) ---
 st.html(f"""
     <div style='display: flex; align-items: center; gap: 20px; margin-bottom: 25px; padding: 10px;'>
         <img src='{img_src}' style='width: 100px; height: 100px; object-fit: contain; background-color: white; border-radius: 50%; padding: 8px; border: 3px solid #FFD700; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);' onerror="this.src='https://img.icons8.com/color/96/000000/goverment.png';">
         <div style='text-align: left;'>
             <h1 style='font-size: 38px; font-weight: bold; margin: 0 0 5px 0; color: #003366;'>
-                 &nbsp;ระบบงานทะเบียนโรงแรม
+                🏨 &nbsp;ระบบงานทะเบียนโรงแรม
             </h1>
             <h2 style='font-size: 24px; font-weight: normal; color: #555555; margin: 0;'>
                 กรมการปกครอง ที่ว่าการอำเภอเมืองประจวบคีรีขันธ์
@@ -85,7 +85,7 @@ def load_data():
             
             row = {
                 'รหัสระบบ': h.get('id'),
-                'เลขที่ใบอนุญาต (ร.บ.2)': lic.get('license_no', '-'),
+                'เลขที่ใบอนุญาต': lic.get('license_no', '-'),
                 'ชื่อโรงแรม': h.get('hotel_name', ''),
                 'ประเภทโรงแรม': h.get('hotel_type', ''),
                 'ชื่อผู้ประกอบการ': h.get('owner_name', ''),
@@ -102,7 +102,7 @@ def load_data():
         
         df = pd.DataFrame(data)
         if not df.empty:
-            df = df.sort_values(by='เลขที่ใบอนุญาต (ร.บ.2)', ascending=True).reset_index(drop=True)
+            df = df.sort_values(by='เลขที่ใบอนุญาต', ascending=True).reset_index(drop=True)
         return df
     except Exception as e:
         st.error(f"⚠️ ไม่สามารถเชื่อมต่อฐานข้อมูล Supabase ได้: {e}")
@@ -189,7 +189,7 @@ with tab1:
         if search_query:
             df_filtered = df_filtered[
                 df_filtered['ชื่อโรงแรม'].str.contains(search_query, na=False) | 
-                df_filtered['เลขที่ใบอนุญาต (ร.บ.2)'].str.contains(search_query, na=False) | 
+                df_filtered['เลขที่ใบอนุญาต'].str.contains(search_query, na=False) | 
                 df_filtered['ชื่อผู้ประกอบการ'].str.contains(search_query, na=False) |
                 df_filtered['ชื่อผู้จัดการโรงแรม (หน้างาน)'].str.contains(search_query, na=False) |
                 df_filtered['ที่อยู่'].str.contains(search_query, na=False)
@@ -211,7 +211,7 @@ with tab1:
         df_filtered['เบอร์โทรติดต่อหน้างาน'] = contact_phones
 
         display_cols = [
-            'เลขที่ใบอนุญาต (ร.บ.2)', 'ชื่อโรงแรม', 'ประเภทโรงแรม', 
+            'เลขที่ใบอนุญาต', 'ชื่อโรงแรม', 'ประเภทโรงแรม', 
             'ชื่อผู้ประกอบการ', 'ชื่อผู้จัดการโรงแรม (หน้างาน)', 'จำนวนห้องพัก', 
             'วันออกใบอนุญาต', 'วันหมดอายุ', 'วันคงเหลือ (วัน)', 
             'สถานะใบอนุญาต', 'สถานะค่าธรรมเนียมรายปี', 'ที่อยู่', 'เบอร์โทรติดต่อหน้างาน'
@@ -264,7 +264,7 @@ with tab1:
         st.markdown("---")
         
         st.markdown("### ⚙️ จัดการข้อมูลการจัดการระดับโรงแรม (แก้ไข/ลบข้อมูล)")
-        hotel_list = {f"[{row['รหัสระบบ']}] ใบอนุญาต: {row['เลขที่ใบอนุญาต (ร.บ.2)']} - {row['ชื่อโรงแรม']}": row['รหัสระบบ'] for idx, row in df_filtered.iterrows()}
+        hotel_list = {f"[{row['รหัสระบบ']}] ใบอนุญาต: {row['เลขที่ใบอนุญาต']} - {row['ชื่อโรงแรม']}": row['รหัสระบบ'] for idx, row in df_filtered.iterrows()}
         selected_hotel_str = st.selectbox("เลือกโรงแรมที่ต้องการจัดการข้อมูล:", ["-- กรุณาเลือกโรงแรม --"] + list(hotel_list.keys()))
         
         if selected_hotel_str != "-- กรุณาเลือกโรงแรม --":
@@ -291,7 +291,7 @@ with tab1:
                     with ec2:
                         edit_tel = st.text_input("เบอร์โทรศัพท์เจ้าของ", value=str(hotel_row['เบอร์โทรศัพท์เจ้าของ']) if hotel_row['เบอร์โทรศัพท์เจ้าของ'] and str(hotel_row['เบอร์โทรศัพท์เจ้าของ']) != 'None' else "")
                         edit_manager_tel = st.text_input("เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)", value=str(hotel_row['เบอร์โทรศัพท์ผู้จัดการ']) if hotel_row['เบอร์โทรศัพท์ผู้จัดการ'] and str(hotel_row['เบอร์โทรศัพท์ผู้จัดการ']) != 'None' else "")
-                        edit_l_no = st.text_input("เลขที่ใบอนุญาต ร.บ. 2 *", value=str(hotel_row['เลขที่ใบอนุญาต (ร.บ.2)']) if hotel_row['เลขที่ใบอนุญาต (ร.บ.2)'] and str(hotel_row['เลขที่ใบอนุญาต (ร.บ.2)']) != 'None' else "")
+                        edit_l_no = st.text_input("เลขที่ใบอนุญาต *", value=str(hotel_row['เลขที่ใบอนุญาต']) if hotel_row['เลขที่ใบอนุญาต'] and str(hotel_row['เลขที่ใบอนุญาต']) != 'None' else "")
                         
                         try: current_issue = datetime.strptime(str(hotel_row['วันออกใบอนุญาต']), "%Y-%m-%d").date()
                         except: current_issue = date.today()
@@ -299,7 +299,7 @@ with tab1:
                         except: current_expiry = date.today()
                             
                         edit_l_issue = st.date_input("วันที่ออกใบอนุญาต", current_issue)
-                        edit_l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", current_expiry)
+                        edit_l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (มีอายุ 5 ปี)", current_expiry)
                         
                         try: default_fee_idx = FEE_STATUS_OPTIONS.index(hotel_row['สถานะค่าธรรมเนียมรายปี'])
                         except: default_fee_idx = 0
@@ -388,9 +388,9 @@ with tab2:
         with c2:
             h_tel = st.text_input("เบอร์โทรศัพท์เจ้าของ")
             h_manager_tel = st.text_input("เบอร์โทรศัพท์ผู้จัดการ (ติดต่อด่วน)")
-            l_no = st.text_input("เลขที่ใบอนุญาต ร.บ. 2 *")
+            l_no = st.text_input("เลขที่ใบอนุญาต *")
             l_issue = st.date_input("วันที่ออกใบอนุญาต", date.today())
-            l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (ร.บ.2 มีอายุ 5 ปี)", date.today())
+            l_expiry = st.date_input("วันที่ใบอนุญาตหมดอายุ (มีอายุ 5 ปี)", date.today())
             l_fee = st.selectbox("สถานะค่าธรรมเนียมรายปี", FEE_STATUS_OPTIONS)
             
         st.markdown("---")
