@@ -4,31 +4,29 @@ import sqlite3
 from datetime import date, datetime
 import io
 
-# 1. ตั้งค่าหน้าเว็บให้ดูสะอาด สไตล์งานราชการ
+# 1. ตั้งค่าหน้าเว็บให้กว้างและสะอาด สไตล์งานราชการ
 st.set_page_config(page_title="ระบบทะเบียนโรงแรม - อำเภอ", layout="wide")
 
-# --- ส่วนที่ 1: ตรากรมการปกครองส่วนกึ่งกลางหน้าจอ ---
-col_logo1, col_logo2, col_logo3 = st.columns([2, 1, 2])
-with col_logo2:
+# --- แก้ไขจุดพัง: ใช้ตาราง layout คุมรูปภาพโลโก้และข้อความให้อยู่ในระนาบเดียวกันอย่างมั่นคง ---
+logo_left, logo_center, logo_right = st.columns([1, 6, 1])
+
+with logo_center:
+    # เปลี่ยนมาใช้ลิงก์ตรงจากโดเมนสำนักบริหารการทะเบียน (BORA) เสถียร 100% ไม่พังง่าย
     st.image(
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Seal_of_the_Department_of_Provincial_Administration_%28Thailand%29.svg/512px-Seal_of_the_Department_of_Provincial_Administration_%28Thailand%29.svg.png", 
-        use_container_width=True
+        "https://stat.bora.dopa.go.th/stat/images/dopa.png", 
+        width=120
     )
-
-st.markdown("<br>", unsafe_html=True)
-
-# --- ส่วนที่ 2: หัวข้อระบบพร้อมไอคอนและข้อความตามรูปต้นแบบเป๊ะ ๆ ---
-# ถอดรหัสโครงสร้างข้อความและฟอนต์ให้ตรงตามสเปกงานทะเบียนอำเภอเมืองประจวบฯ
-st.markdown("""
-    <div style='text-align: left; margin-bottom: 20px;'>
-        <h1 style='font-size: 42px; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center;'>
-            🏨 &nbsp;ระบบงานทะเบียนโรงแรม
-        </h1>
-        <h2 style='font-size: 26px; font-weight: normal; color: #FFFFFF; margin-top: 0px;'>
-            กรมการปกครอง ที่ว่าการอำเภอเมืองประจวบคีรีขันธ์
-        </h2>
-    </div>
-""", unsafe_html=True)
+    # แสดงหัวข้อระบบพร้อมไอคอนและข้อความถอดพิมพ์เขียวจากรูปต้นแบบ
+    st.markdown("""
+        <div style='text-align: left; margin-top: 10px; margin-bottom: 20px;'>
+            <h1 style='font-size: 38px; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center;'>
+                🏨 &nbsp;ระบบงานทะเบียนโรงแรม
+            </h1>
+            <h2 style='font-size: 24px; font-weight: normal; color: #CCCCCC; margin-top: 0px;'>
+                กรมการปกครอง ที่ว่าการอำเภอเมืองประจวบคีรีขันธ์
+            </h2>
+        </div>
+    """, unsafe_html=True)
 
 st.markdown("---")
 
