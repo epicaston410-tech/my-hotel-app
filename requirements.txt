@@ -1,4 +1,6 @@
 streamlit
 pandas
+streamlit-gsheets
 gspread
 oauth2client
+openpyxl
