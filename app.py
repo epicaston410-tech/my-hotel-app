@@ -236,7 +236,14 @@ with tab1:
             end_idx = min(start_idx + items_per_page, total_items)
             
             df_page = df_filtered.iloc[start_idx:end_idx]
-            st.dataframe(df_page[display_cols], use_container_width=True)
+            
+            # --- ส่วนที่เพิ่มเข้ามาใหม่เพื่อตัดคำให้สั้นลงเฉพาะตอนโชว์ตาราง ---
+            df_display = df_page[display_cols].copy()
+            df_display['ประเภทโรงแรม'] = df_display['ประเภทโรงแรม'].apply(
+                lambda x: str(x).split(' (')[0].replace(' ไม่เป็นโรงแรม', '') if pd.notnull(x) else x
+            )
+            
+            st.dataframe(df_display, use_container_width=True)
             
             p_col1, p_col2, p_col3, p_col4 = st.columns([2, 3, 2, 5])
             with p_col1:
