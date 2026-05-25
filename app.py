@@ -35,9 +35,10 @@ else:
     img_src = "https://raw.githubusercontent.com/streamlit/proactive-connectors/main/branding/logo.png"
 
 # --- ส่วนหัวของระบบ ---
+# --- ส่วนหัวของระบบ ---
 st.html(f"""
     <div style='display: flex; align-items: center; gap: 20px; margin-bottom: 25px; padding: 10px;'>
-        <img src='{img_src}' style='width: 100px; height: auto;' onerror="this.src='https://img.icons8.com/color/96/000000/goverment.png';">
+        <img src='{img_src}' style='width: 100px; height: 100px; object-fit: contain; background-color: white; border-radius: 50%; padding: 8px; border: 3px solid #FFD700; box-shadow: 0px 4px 10px rgba(0,0,0,0.3);' onerror="this.src='https://img.icons8.com/color/96/000000/goverment.png';">
         <div style='text-align: left;'>
             <h1 style='font-size: 38px; font-weight: bold; margin: 0 0 5px 0; color: #FFFFFF;'>
                 🏨 &nbsp;ระบบงานทะเบียนโรงแรม
